@@ -25,6 +25,7 @@ class BurpExtender(IBurpExtender, IExtensionStateListener, ITab, IHttpListener):
 		self.currentEndpoint = 0
 		self.aws_access_key_id = ''
 		self.aws_secret_accesskey = ''
+		self.aws_session_token = ''
 		self.enabled_regions = {}
 
 
@@ -67,11 +68,17 @@ class BurpExtender(IBurpExtender, IExtensionStateListener, ITab, IHttpListener):
 	def startAPIGateway(self):
 		self.getRegions()
 		for region in self.enabled_regions.keys():
-			self.awsclient = boto3.client('apigateway',
-				aws_access_key_id=self.access_key.text,
-				aws_secret_access_key=self.secret_key.text,
-				region_name=region
-			)
+			# Build boto3 client parameters
+			client_params = {
+				'aws_access_key_id': self.access_key.text,
+				'aws_secret_access_key': self.secret_key.text,
+				'region_name': region
+			}
+			# Add session token if provided
+			if self.session_token.text:
+				client_params['aws_session_token'] = self.session_token.text
+			
+			self.awsclient = boto3.client('apigateway', **client_params)
 
 			self.create_api_response = self.awsclient.create_rest_api(
 				name=API_NAME,
@@ -175,11 +182,17 @@ class BurpExtender(IBurpExtender, IExtensionStateListener, ITab, IHttpListener):
 	def deleteAPIGateway(self):
 		if self.enabled_regions:
 			for region in self.enabled_regions.keys():
-				self.awsclient = boto3.client('apigateway',
-					aws_access_key_id=self.access_key.text,
-					aws_secret_access_key=self.secret_key.text,
-					region_name=region
-				)
+				# Build boto3 client parameters
+				client_params = {
+					'aws_access_key_id': self.access_key.text,
+					'aws_secret_access_key': self.secret_key.text,
+					'region_name': region
+				}
+				# Add session token if provided
+				if self.session_token.text:
+					client_params['aws_session_token'] = self.session_token.text
+				
+				self.awsclient = boto3.client('apigateway', **client_params)
 
 				response = self.awsclient.delete_rest_api(
 					restApiId=self.enabled_regions[region]
@@ -193,8 +206,10 @@ class BurpExtender(IBurpExtender, IExtensionStateListener, ITab, IHttpListener):
 	def saveKeys(self, event):
 		aws_access_key_id=self.access_key.text
 		aws_secret_access_key=self.secret_key.text
+		aws_session_token=self.session_token.text
 		self.callbacks.saveExtensionSetting("aws_access_key_id", aws_access_key_id)
 		self.callbacks.saveExtensionSetting("aws_secret_access_key", aws_secret_access_key)
+		self.callbacks.saveExtensionSetting("aws_session_token", aws_session_token)
 		return
 
 	#Called on "Enable" button click to spin up the API Gateway
@@ -205,6 +220,7 @@ class BurpExtender(IBurpExtender, IExtensionStateListener, ITab, IHttpListener):
 		self.enable_button.setEnabled(False)
 		self.secret_key.setEnabled(False)
 		self.access_key.setEnabled(False)
+		self.session_token.setEnabled(False)
 		self.target_host.setEnabled(False)
 		self.disable_button.setEnabled(True)
 		return
@@ -217,6 +233,7 @@ class BurpExtender(IBurpExtender, IExtensionStateListener, ITab, IHttpListener):
 		self.enable_button.setEnabled(True)
 		self.secret_key.setEnabled(True)
 		self.access_key.setEnabled(True)
+		self.session_token.setEnabled(True)
 		self.target_host.setEnabled(True)
 		self.disable_button.setEnabled(False)
 		return
@@ -296,10 +313,13 @@ class BurpExtender(IBurpExtender, IExtensionStateListener, ITab, IHttpListener):
 	def getUiComponent(self):
 		aws_access_key_id = self.callbacks.loadExtensionSetting("aws_access_key_id")
 		aws_secret_accesskey = self.callbacks.loadExtensionSetting("aws_secret_access_key")
+		aws_session_token = self.callbacks.loadExtensionSetting("aws_session_token")
 		if aws_access_key_id:
 			self.aws_access_key_id = aws_access_key_id
 		if aws_secret_accesskey:
 			self.aws_secret_accesskey = aws_secret_accesskey
+		if aws_session_token:
+			self.aws_session_token = aws_session_token
 
 		self.panel = JPanel()
 
@@ -319,6 +339,13 @@ class BurpExtender(IBurpExtender, IExtensionStateListener, ITab, IHttpListener):
 		self.secret_key_panel.add(JLabel('Secret Key: '))
 		self.secret_key = JPasswordField(self.aws_secret_accesskey,25)
 		self.secret_key_panel.add(self.secret_key)
+
+		self.session_token_panel = JPanel()
+		self.main.add(self.session_token_panel)
+		self.session_token_panel.setLayout(BoxLayout(self.session_token_panel, BoxLayout.X_AXIS))
+		self.session_token_panel.add(JLabel('Session Token (optional): '))
+		self.session_token = JPasswordField(self.aws_session_token,25)
+		self.session_token_panel.add(self.session_token)
 
 		self.target_host_panel = JPanel()
 		self.main.add(self.target_host_panel)
